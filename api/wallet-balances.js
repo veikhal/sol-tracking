@@ -58,8 +58,6 @@ async function fetchWalletBalance(walletAddress, solscanApiKey) {
 
 app.get("/api/wallet-balances", async (req, res) => {
   const solscanApiKey = process.env.SOLSCAN_API_KEY
-
-  // TEMPORARY DEBUGGING LINE: Check if the API key is being read
   console.log("SOLSCAN_API_KEY from environment:", solscanApiKey ? "Key is present" : "Key is MISSING or empty")
   // If you see "Key is present" but still get 401, the key itself might be invalid or have incorrect permissions.
   // If you see "Key is MISSING or empty", the environment variable is not set correctly in Vercel.
