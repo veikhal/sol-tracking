@@ -17,8 +17,77 @@ const WALLETS = [
   "Fqi2c66QRr4wLghXNnhNg4Dr9u4LV4Djy3aL9jcsM5fi"
 ]
 
-// Alternative function using Solana RPC directly
-async function fetchWalletBalanceRPC(walletAddress) {
+// Get URANUS token balance from first wallet
+async function fetchUranusTokenBalance(walletAddress) {
+  const URANUS_TOKEN_MINT = "BFgdzMkTPdKKJeTipv2njtDEwhKxkgFueJQfJGt1jups"
+  
+  try {
+    // Get token accounts for the wallet
+    const response = await axios.post('https://api.mainnet-beta.solana.com', {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getTokenAccountsByOwner',
+      params: [
+        walletAddress,
+        { mint: URANUS_TOKEN_MINT },
+        { encoding: 'jsonParsed' }
+      ]
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      timeout: 10000,
+    })
+
+    if (response.data.error) {
+      console.log(`No URANUS token account found for ${walletAddress}`)
+      return 0
+    }
+
+    if (!response.data.result.value || response.data.result.value.length === 0) {
+      console.log(`No URANUS tokens in wallet ${walletAddress}`)
+      return 0
+    }
+
+    // Get token balance
+    const tokenInfo = response.data.result.value[0].account.data.parsed.info
+    const tokenAmount = parseFloat(tokenInfo.tokenAmount.uiAmount || 0)
+
+    if (tokenAmount === 0) {
+      return 0
+    }
+
+    // Try to get URANUS price from Jupiter API (Solana DEX aggregator)
+    try {
+      const priceResponse = await axios.get(`https://price.jup.ag/v4/price?ids=${URANUS_TOKEN_MINT}`)
+      const uranusPrice = priceResponse.data.data[URANUS_TOKEN_MINT]?.price || 0
+      
+      console.log(`URANUS balance: ${tokenAmount}, Price: ${uranusPrice}`)
+      return tokenAmount * uranusPrice
+    } catch (priceError) {
+      console.log('Could not fetch URANUS price from Jupiter, trying alternative...')
+      
+      // Alternative: Try DexScreener API
+      try {
+        const dexResponse = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${URANUS_TOKEN_MINT}`)
+        const pairData = dexResponse.data.pairs?.[0]
+        const uranusPrice = parseFloat(pairData?.priceUsd || 0)
+        
+        console.log(`URANUS balance: ${tokenAmount}, Price: ${uranusPrice} (from DexScreener)`)
+        return tokenAmount * uranusPrice
+      } catch (dexError) {
+        console.log(`Could not fetch URANUS price. Token amount: ${tokenAmount}`)
+        return 0
+      }
+    }
+  } catch (error) {
+    console.error(`Error fetching URANUS token balance for ${walletAddress}:`, error.message)
+    return 0
+  }
+}
+
+// SOL balance function using RPC
+async function fetchSolBalanceRPC(walletAddress) {
   try {
     const response = await axios.post('https://api.mainnet-beta.solana.com', {
       jsonrpc: '2.0',
@@ -45,7 +114,7 @@ async function fetchWalletBalanceRPC(walletAddress) {
 
     return solBalance * solPrice
   } catch (error) {
-    console.error(`Error fetching balance for ${walletAddress}:`, error.message)
+    console.error(`Error fetching SOL balance for ${walletAddress}:`, error.message)
     return 0
   }
 }
@@ -94,48 +163,39 @@ async function fetchWalletBalanceSolscan(walletAddress, solscanApiKey) {
     
     // Fallback to RPC method
     console.log(`Falling back to RPC method for ${walletAddress}`)
-    return await fetchWalletBalanceRPC(walletAddress)
+    return await fetchSolBalanceRPC(walletAddress)
   }
 }
 
 app.get("/api/wallet-balances", async (req, res) => {
-  const solscanApiKey = process.env.SOLSCAN_API_KEY
-
-  console.log("API key present:", !!solscanApiKey)
-  console.log("Fetching balances for wallets:", WALLETS)
-
+  console.log("Fetching wallet balances...")
+  
   try {
     let totalUsdValue = 0
-    const walletBalances = []
 
-    for (const wallet of WALLETS) {
-      console.log(`Fetching balance for wallet: ${wallet}`)
-      
-      let balance = 0
-      
-      if (solscanApiKey) {
-        // Try Solscan first if API key is available
-        balance = await fetchWalletBalanceSolscan(wallet, solscanApiKey)
-      } else {
-        console.log("No Solscan API key, using RPC method")
-        // Use RPC method as fallback
-        balance = await fetchWalletBalanceRPC(wallet)
-      }
-      
-      console.log(`Wallet ${wallet} balance: $${balance}`)
-      totalUsdValue += balance
-      walletBalances.push({
-        address: wallet,
-        usdValue: balance
-      })
-    }
+    // First wallet: SOL + URANUS token
+    const firstWallet = WALLETS[0]
+    console.log(`Fetching SOL balance for first wallet: ${firstWallet}`)
+    const firstWalletSol = await fetchSolBalanceRPC(firstWallet)
+    
+    console.log(`Fetching URANUS token balance for first wallet: ${firstWallet}`)
+    const uranusValue = await fetchUranusTokenBalance(firstWallet)
+    
+    const firstWalletTotal = firstWalletSol + uranusValue
+    console.log(`First wallet total: ${firstWalletTotal} (SOL: ${firstWalletSol}, URANUS: ${uranusValue})`)
+    
+    // Second wallet: SOL only
+    const secondWallet = WALLETS[1]
+    console.log(`Fetching SOL balance for second wallet: ${secondWallet}`)
+    const secondWalletSol = await fetchSolBalanceRPC(secondWallet)
+    console.log(`Second wallet total: ${secondWalletSol}`)
+    
+    totalUsdValue = firstWalletTotal + secondWalletSol
+    console.log(`Grand total: ${totalUsdValue}`)
 
-    console.log(`Total USD value: $${totalUsdValue}`)
-
+    // Just return the sum as requested
     res.json({
-      total: totalUsdValue,
-      wallets: walletBalances, // Added for debugging
-      timestamp: new Date().toISOString()
+      total: Math.round(totalUsdValue * 100) / 100 // Round to 2 decimal places
     })
   } catch (error) {
     console.error("Error in /api/wallet-balances endpoint:", error)
@@ -144,7 +204,7 @@ app.get("/api/wallet-balances", async (req, res) => {
       message: error.message 
     })
   }
-})
+}))
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
