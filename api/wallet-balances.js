@@ -1,4 +1,3 @@
-// /api/wallet-balances.js (for Vercel backend)
 export default async function handler(req, res) {
   const wallets = [
     "akgSyoqae5tWyiuAxZJv5VKzthtHruUkQxgSuPmhWRa",
@@ -18,24 +17,23 @@ export default async function handler(req, res) {
 
   async function fetchWalletUSD(wallet) {
     try {
-      const response = await fetch(`https://public-api.solscan.io/account/${wallet}`, { headers });
+      const response = await fetch(`https://public-api.solscan.io/v2/account/tokens?address=${wallet}`, { headers });
+
       if (!response.ok) {
         console.error(`Solscan API error for ${wallet}:`, response.statusText);
         return 0;
       }
 
-      const data = await response.json();
+      const tokens = await response.json();
+      let total = 0;
 
-      if (!data || !Array.isArray(data.tokens)) {
-        console.warn(`Unexpected response format for ${wallet}:`, data);
-        return 0;
+      for (const token of tokens) {
+        const price = token.tokenPrice?.usd || 0;
+        const amount = token.tokenAmount?.uiAmount || 0;
+        total += price * amount;
       }
 
-      return data.tokens.reduce((sum, token) => {
-        const price = typeof token.price === "number" ? token.price : 0;
-        const amount = token.tokenAmount?.uiAmount ?? 0;
-        return sum + price * amount;
-      }, 0);
+      return total;
     } catch (err) {
       console.error(`Fetch error for ${wallet}:`, err.message);
       return 0;
@@ -47,7 +45,6 @@ export default async function handler(req, res) {
     const total = values.reduce((a, b) => a + b, 0);
     res.status(200).json({ total: total.toFixed(2) });
   } catch (err) {
-    console.error("Unexpected error:", err.message);
     res.status(500).json({ error: "Failed to calculate total" });
   }
 }
