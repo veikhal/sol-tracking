@@ -7,7 +7,7 @@ const app = express()
 
 // Configure CORS to allow requests from your Next.js frontend domain
 const corsOptions = {
-  origin: ["https://normiescoin.com", "http://localhost:3000"], // Added localhost for testing
+  origin: ["https://normiescoin.com", "http://localhost:3000"],
   optionsSuccessStatus: 200,
 }
 app.use(cors(corsOptions))
@@ -62,7 +62,7 @@ async function fetchUranusTokenBalance(walletAddress) {
       const priceResponse = await axios.get(`https://price.jup.ag/v4/price?ids=${URANUS_TOKEN_MINT}`)
       const uranusPrice = priceResponse.data.data[URANUS_TOKEN_MINT]?.price || 0
       
-      console.log(`URANUS balance: ${tokenAmount}, Price: ${uranusPrice}`)
+      console.log(`URANUS balance: ${tokenAmount}, Price: $${uranusPrice}`)
       return tokenAmount * uranusPrice
     } catch (priceError) {
       console.log('Could not fetch URANUS price from Jupiter, trying alternative...')
@@ -73,7 +73,7 @@ async function fetchUranusTokenBalance(walletAddress) {
         const pairData = dexResponse.data.pairs?.[0]
         const uranusPrice = parseFloat(pairData?.priceUsd || 0)
         
-        console.log(`URANUS balance: ${tokenAmount}, Price: ${uranusPrice} (from DexScreener)`)
+        console.log(`URANUS balance: ${tokenAmount}, Price: $${uranusPrice} (from DexScreener)`)
         return tokenAmount * uranusPrice
       } catch (dexError) {
         console.log(`Could not fetch URANUS price. Token amount: ${tokenAmount}`)
@@ -119,54 +119,6 @@ async function fetchSolBalanceRPC(walletAddress) {
   }
 }
 
-// Fixed Solscan function with correct endpoint
-async function fetchWalletBalanceSolscan(walletAddress, solscanApiKey) {
-  try {
-    // Using the correct Solscan API v1 endpoint
-    const response = await axios.get(`https://public-api.solscan.io/account/${walletAddress}`, {
-      headers: {
-        'token': solscanApiKey, // Solscan uses 'token' header, not 'Authorization'
-        'Content-Type': 'application/json',
-      },
-      timeout: 10000,
-    })
-
-    const data = response.data
-
-    if (!data.success) {
-      throw new Error('Solscan API returned unsuccessful response')
-    }
-
-    let walletTotal = 0
-
-    // Add SOL balance (lamports to SOL conversion)
-    if (data.data && data.data.lamports) {
-      const solBalance = data.data.lamports / 1000000000
-      
-      // Get SOL price
-      const priceResponse = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd')
-      const solPrice = priceResponse.data.solana.usd
-      
-      walletTotal += solBalance * solPrice
-    }
-
-    // Add token balances (if available and you have token price data)
-    // This part depends on having token price information
-    
-    return walletTotal
-  } catch (error) {
-    console.error(`Solscan API error for ${walletAddress}:`, error.message)
-    if (error.response) {
-      console.error("Error response data:", error.response.data)
-      console.error("Error response status:", error.response.status)
-    }
-    
-    // Fallback to RPC method
-    console.log(`Falling back to RPC method for ${walletAddress}`)
-    return await fetchSolBalanceRPC(walletAddress)
-  }
-}
-
 app.get("/api/wallet-balances", async (req, res) => {
   console.log("Fetching wallet balances...")
   
@@ -182,20 +134,20 @@ app.get("/api/wallet-balances", async (req, res) => {
     const uranusValue = await fetchUranusTokenBalance(firstWallet)
     
     const firstWalletTotal = firstWalletSol + uranusValue
-    console.log(`First wallet total: ${firstWalletTotal} (SOL: ${firstWalletSol}, URANUS: ${uranusValue})`)
+    console.log(`First wallet total: $${firstWalletTotal} (SOL: $${firstWalletSol}, URANUS: $${uranusValue})`)
     
     // Second wallet: SOL only
     const secondWallet = WALLETS[1]
     console.log(`Fetching SOL balance for second wallet: ${secondWallet}`)
     const secondWalletSol = await fetchSolBalanceRPC(secondWallet)
-    console.log(`Second wallet total: ${secondWalletSol}`)
+    console.log(`Second wallet total: $${secondWalletSol}`)
     
     totalUsdValue = firstWalletTotal + secondWalletSol
-    console.log(`Grand total: ${totalUsdValue}`)
+    console.log(`Grand total: $${totalUsdValue}`)
 
     // Just return the sum as requested
     res.json({
-      total: Math.round(totalUsdValue * 100) / 100 // Round to 2 decimal places
+      total: Math.round(totalUsdValue * 100) / 100
     })
   } catch (error) {
     console.error("Error in /api/wallet-balances endpoint:", error)
@@ -204,14 +156,13 @@ app.get("/api/wallet-balances", async (req, res) => {
       message: error.message 
     })
   }
-}))
+})
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
   res.json({ 
     status: "ok", 
-    timestamp: new Date().toISOString(),
-    hasApiKey: !!process.env.SOLSCAN_API_KEY 
+    timestamp: new Date().toISOString()
   })
 })
 
