@@ -16,8 +16,8 @@ const WALLETS = ["akgSyoqae5tWyiuAxZJv5VKzthtHruUkQxgSuPmhWRa", "Fqi2c66QRr4wLgh
 
 async function fetchWalletBalance(walletAddress, solscanApiKey) {
   try {
-    // Updated to use the new Pro API endpoint and pass address as a query parameter
-    const response = await axios.get(`https://pro-api.solscan.io/v2.0/account/detail?address=${walletAddress}`, {
+    // Attempting to use the public API domain with the V2 endpoint path
+    const response = await axios.get(`https://public-api.solscan.io/v2.0/account/detail?address=${walletAddress}`, {
       headers: {
         Authorization: `Bearer ${solscanApiKey}`,
         "Content-Type": "application/json",
@@ -58,9 +58,6 @@ async function fetchWalletBalance(walletAddress, solscanApiKey) {
 
 app.get("/api/wallet-balances", async (req, res) => {
   const solscanApiKey = process.env.SOLSCAN_API_KEY
-  console.log("SOLSCAN_API_KEY from environment:", solscanApiKey ? "Key is present" : "Key is MISSING or empty")
-  // If you see "Key is present" but still get 401, the key itself might be invalid or have incorrect permissions.
-  // If you see "Key is MISSING or empty", the environment variable is not set correctly in Vercel.
 
   if (!solscanApiKey) {
     console.error("SOLSCAN_API_KEY is not set in backend environment variables.")
