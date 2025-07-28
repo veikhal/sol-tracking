@@ -6,7 +6,7 @@ const app = express();
 
 // Configure CORS to allow requests from your frontend domain
 const corsOptions = {
-  origin: ["https://www.normiescoin.com", "http://localhost:3000"], // Allow localhost for development
+  origin: ["https://www.normiescoin.com", "http://localhost:3000"],
   optionsSuccessStatus: 200,
 };
 app.use(cors(corsOptions));
@@ -29,12 +29,16 @@ async function fetchTokenPrice(tokenAddress, solscanApiKey) {
       },
       timeout: 10000,
     });
-    return Number.parseFloat(response.data.data?.priceUsdt) || null;
+    const price = Number.parseFloat(response.data.data?.priceUsdt);
+    if (isNaN(price)) {
+      console.error(`Invalid price for ${tokenAddress}:`, response.data.data);
+      return null;
+    }
+    return price;
   } catch (error) {
     console.error(`Error fetching price for ${tokenAddress}:`, error.message);
     if (error.response) {
-      console.error("Error response data:", error.response.data);
-      console.error("Error response status:", error.response.status);
+      console.error("Status:", error.response.status, "Data:", error.response.data);
     }
     return null;
   }
@@ -52,25 +56,31 @@ async function fetchWalletBalance(walletAddress, solscanApiKey) {
       },
       timeout: 10000,
     });
-    const data = response.data;
+    const data = response.data.data || [];
+    console.log(`Response for ${walletAddress}:`, JSON.stringify(data, null, 2)); // Debug log
     let walletTotal = 0;
 
-    // Fetch SOL price (SOL mint address)
+    // Fetch SOL price
     const solPrice = await fetchTokenPrice("So11111111111111111111111111111111111111112", solscanApiKey);
 
-    // Process tokens
-    for (const token of data.data || []) {
+    for (const token of data) {
       const amount = Number.parseFloat(token.amount) / Math.pow(10, token.tokenDecimals || 0);
+      if (isNaN(amount)) {
+        console.error(`Invalid amount for ${token.tokenAddress} in ${walletAddress}:`, token);
+        continue;
+      }
       if (token.tokenAddress === "So11111111111111111111111111111111111111112") {
-        // SOL balance
         if (solPrice) {
           walletTotal += amount * solPrice;
+        } else {
+          console.error(`No SOL price for ${walletAddress}`);
         }
       } else {
-        // SPL tokens
         const price = await fetchTokenPrice(token.tokenAddress, solscanApiKey);
         if (price) {
           walletTotal += amount * price;
+        } else {
+          console.error(`No price for ${token.tokenAddress} in ${walletAddress}`);
         }
       }
     }
@@ -79,8 +89,7 @@ async function fetchWalletBalance(walletAddress, solscanApiKey) {
   } catch (error) {
     console.error(`Error fetching balance for ${walletAddress}:`, error.message);
     if (error.response) {
-      console.error("Error response data:", error.response.data);
-      console.error("Error response status:", error.response.status);
+      console.error("Status:", error.response.status, "Data:", error.response.data);
     }
     return 0;
   }
@@ -92,27 +101,20 @@ app.get("/api/wallet-balances", async (req, res) => {
 
   if (!solscanApiKey) {
     console.error("SOLSCAN_API_KEY is not set in environment variables.");
-    return res.status(500).json({ error: "Backend API key not configured." });
+    return res.status(500).json({ total: 0 });
   }
 
   try {
     let totalUsdValue = 0;
-    const walletBalances = {};
-
     for (const wallet of WALLETS) {
       const balance = await fetchWalletBalance(wallet, solscanApiKey);
-      walletBalances[wallet] = balance;
       totalUsdValue += balance;
     }
 
-    res.json({
-      total: Number(totalUsdValue.toFixed(2)),
-      wallets: walletBalances,
-      lastUpdated: new Date().toISOString(),
-    });
+    res.json({ total: Number(totalUsdValue.toFixed(2)) });
   } catch (error) {
     console.error("Error in /api/wallet-balances endpoint:", error.message);
-    res.status(500).json({ error: "Failed to fetch balances" });
+    res.status(500).json({ total: 0 });
   }
 });
 
