@@ -5,12 +5,27 @@ const cors = require("cors")
 
 const app = express()
 
-// Configure CORS to allow requests from your Next.js frontend domain
+// --- NEW, MORE ROBUST CORS CONFIGURATION ---
+const allowedOrigins = [
+  'https://normiescoin.com', 
+  'http://localhost:3000'
+  'https://www.normiescoin.com', 
+];
+
 const corsOptions = {
-  origin: ["https://normiescoin.com", "http://localhost:3000"],
+  origin: function (origin, callback) {
+    // The 'origin' is the URL of the site making the request (e.g., https://normiescoin.com)
+    // The '!origin' part allows requests from tools like Postman or server-to-server calls
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
   optionsSuccessStatus: 200,
-}
-app.use(cors(corsOptions))
+};
+
+app.use(cors(corsOptions));
 
 const WALLETS = [
   "akgSyoqae5tWyiuAxZJv5VKzthtHruUkQxgSuPmhWRa", 
