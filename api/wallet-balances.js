@@ -7,9 +7,10 @@ const app = express()
 
 // --- NEW, MORE ROBUST CORS CONFIGURATION ---
 const allowedOrigins = [
-  'https://normiescoin.com', 
+  'https://normiescoin.com',
+  'https://www.normiescoin.com',
   'http://localhost:3000'
-  'https://www.normiescoin.com', 
+
 ];
 
 const corsOptions = {
