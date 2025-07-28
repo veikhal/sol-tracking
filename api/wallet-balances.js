@@ -32,13 +32,11 @@ async function fetchWalletBalance(walletAddress, solscanApiKey) {
     const data = response.data
     let walletTotal = 0
 
-    // Assuming the response structure for SOL balance and tokens is similar
-    // You might need to adjust these parsing lines if the Pro API returns data in a different format.
     walletTotal += Number.parseFloat(data.solBalance) || 0
 
     if (data.tokens) {
       for (const token of data.tokens) {
-        if (token.tokenPriceUsd) {
+        if (token.tokenPriceUsd && !isNaN(Number.parseFloat(token.tokenPriceUsd))) {
           const amount =
             Number.parseFloat(token.tokenAmount?.amount || "0") /
             Math.pow(10, Number.parseFloat(token.tokenAmount?.decimals || "0"))
@@ -60,6 +58,11 @@ async function fetchWalletBalance(walletAddress, solscanApiKey) {
 
 app.get("/api/wallet-balances", async (req, res) => {
   const solscanApiKey = process.env.SOLSCAN_API_KEY
+
+  // TEMPORARY DEBUGGING LINE: Check if the API key is being read
+  console.log("SOLSCAN_API_KEY from environment:", solscanApiKey ? "Key is present" : "Key is MISSING or empty")
+  // If you see "Key is present" but still get 401, the key itself might be invalid or have incorrect permissions.
+  // If you see "Key is MISSING or empty", the environment variable is not set correctly in Vercel.
 
   if (!solscanApiKey) {
     console.error("SOLSCAN_API_KEY is not set in backend environment variables.")
